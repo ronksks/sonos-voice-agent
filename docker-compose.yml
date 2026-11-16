@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  sonos-agent:
+    build: .
+    container_name: sonos-voice-agent
+    ports:
+      - "8080:8080"
+    environment:
+      - LOG_LEVEL=INFO
+      - OLLAMA_URL=http://host.docker.internal:11434/api/chat
+      - OLLAMA_MODEL=qwen2.5:3b
+      - OLLAMA_TIMEOUT=45.0
+      - OLLAMA_NUM_CTX=4096
+      - OLLAMA_TEMPERATURE=0.1
+      - OLLAMA_THINK=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
