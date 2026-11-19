@@ -2,5 +2,12 @@
 .aider*
 __pycache__/
 *.pyc
+*.pyo
 *.log
 venv/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+nul
+
