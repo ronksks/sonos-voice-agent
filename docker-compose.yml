@@ -1,19 +1,33 @@
-version: "3.8"
-
 services:
   sonos-agent:
     build: .
     container_name: sonos-voice-agent
     ports:
       - "8080:8080"
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - LOG_LEVEL=INFO
-      - OLLAMA_URL=http://host.docker.internal:11434/api/chat
-      - OLLAMA_MODEL=qwen2.5:3b
-      - OLLAMA_TIMEOUT=45.0
-      - OLLAMA_NUM_CTX=4096
-      - OLLAMA_TEMPERATURE=0.1
-      - OLLAMA_THINK=false
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DEFAULT_ROOM=${DEFAULT_ROOM:-living_room}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434/api/chat}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30.0}
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
+      - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.1}
+      - OLLAMA_THINK=${OLLAMA_THINK:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4); sys.exit(0 if r.status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
