@@ -1159,22 +1159,24 @@ class SonosService:
         target_coord = _get_coordinator(target_speaker)
         target_uid = getattr(target_coord, "uid", None)
         target_ip = getattr(target_coord, "ip_address", None)
-        target_group_uid = getattr(getattr(target_speaker, "group", None), "uid", None)
 
         changed: List[str] = []
         skipped: List[str] = []
 
         for raw_member in member_rooms:
             member_name, member_speaker = self.registry.get_speaker(raw_member)
+            member_coord = _get_coordinator(member_speaker)
             member_uid = getattr(member_speaker, "uid", None)
             member_ip = getattr(member_speaker, "ip_address", None)
-            member_group_uid = getattr(getattr(member_speaker, "group", None), "uid", None)
+            member_coord_uid = getattr(member_coord, "uid", None)
+            member_coord_ip = getattr(member_coord, "ip_address", None)
 
             already_same = (
                 member_name == coord_room_name
                 or (target_uid and member_uid and target_uid == member_uid)
                 or (target_ip and member_ip and target_ip == member_ip)
-                or (target_group_uid and member_group_uid and target_group_uid == member_group_uid)
+                or (target_uid and member_coord_uid and target_uid == member_coord_uid)
+                or (target_ip and member_coord_ip and target_ip == member_coord_ip)
             )
             if already_same:
                 skipped.append(member_name)

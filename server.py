@@ -11,7 +11,7 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Annotated, Any, Callable, List, Optional, TypeVar
+from typing import Annotated, Any, Callable, List, Literal, Optional, TypeVar
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ResourceError, ToolError
@@ -20,16 +20,26 @@ from pydantic import Field
 
 from models import (
     ActionResult,
+    AnnouncementResult,
     FavoritesList,
     GroupResult,
+    HandoffMode,
+    HandoffResult,
     HouseholdState,
     InputSource,
     MediaSource,
     PlaybackAction,
+    QueueAction,
     QueueInsertMode,
+    QueueState,
+    RampType,
+    SceneResult,
+    ScenesList,
+    SleepTimerResult,
     VolumeResult,
 )
 from sonos_service import SonosServiceError, get_service
+from workflows import get_workflows
 
 T = TypeVar("T")
 
@@ -306,6 +316,331 @@ async def select_source(
 
 
 # ------------------------------------------------------------------
+# Advanced & Creative Workflow Tools
+# ------------------------------------------------------------------
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Configure Soundbar TV Audio",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
+async def configure_tv_audio(
+    room: Annotated[
+        Optional[str],
+        Field(description="Soundbar room ID or alias (defaults to DEFAULT_ROOM, e.g., living_room Arc)."),
+    ] = None,
+    night_mode: Annotated[
+        Optional[bool],
+        Field(description="Enable/disable Night Sound (compresses loud explosions while preserving quiet details)."),
+    ] = None,
+    speech_enhancement: Annotated[
+        Optional[bool],
+        Field(description="Enable/disable Speech Enhancement (boosts vocal dialogue frequencies)."),
+    ] = None,
+    sub_gain: Annotated[
+        Optional[int],
+        Field(ge=-15, le=15, description="Bonded Sonos Sub gain level (-15 to +15)."),
+    ] = None,
+    surround_level: Annotated[
+        Optional[int],
+        Field(ge=-15, le=15, description="TV surround satellite level (-15 to +15)."),
+    ] = None,
+) -> ActionResult:
+    """Configure Sonos Arc/Beam/Ray home-theater Night Mode, Speech Enhancement, Sub gain, or surround level."""
+    return await _run_service_call(
+        get_workflows().configure_tv_audio,
+        room=room,
+        night_mode=night_mode,
+        speech_enhancement=speech_enhancement,
+        sub_gain=sub_gain,
+        surround_level=surround_level,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Handoff or Extend Audio",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
+async def handoff_audio(
+    from_room: Annotated[
+        str,
+        Field(min_length=1, description="Source room currently playing music or TV."),
+    ],
+    to_rooms: Annotated[
+        List[str],
+        Field(min_length=1, description="Destination room(s) to receive the audio."),
+    ],
+    mode: Annotated[
+        HandoffMode,
+        Field(description="'transfer' moves music seamlessly and detaches from_room; 'extend' mirrors music or TV across both."),
+    ] = "transfer",
+) -> HandoffResult:
+    """Transfer music seamlessly to another room ('follow me') or extend music/TV audio across rooms."""
+    return await _run_service_call(get_workflows().handoff_audio, from_room, to_rooms, mode=mode)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Fade Volume Smoothly",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
+async def fade_volume(
+    target_volume: Annotated[
+        int,
+        Field(ge=0, le=100, description="Destination volume (0-100) reached smoothly via native Sonos ramping."),
+    ],
+    room: Annotated[
+        Optional[str],
+        Field(description="Target room ID or alias (defaults to DEFAULT_ROOM)."),
+    ] = None,
+    ramp_type: Annotated[
+        RampType,
+        Field(description="Sonos ramp profile: SLEEP_TIMER_RAMP_TYPE, AUTOPLAY_RAMP_TYPE, or ALARM_RAMP_TYPE."),
+    ] = "SLEEP_TIMER_RAMP_TYPE",
+    force: Annotated[
+        bool,
+        Field(description="Override per-room or quiet-hours maximum volume safety caps."),
+    ] = False,
+) -> VolumeResult:
+    """Smoothly fade a room's volume using native speaker hardware ramping (ideal for bedtime or wake-up)."""
+    return await _run_service_call(
+        get_workflows().fade_volume,
+        target_volume,
+        room=room,
+        ramp_type=ramp_type,
+        force=force,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Inspect Playback Queue",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
+async def get_queue(
+    room: Annotated[
+        Optional[str],
+        Field(description="Target room ID or alias (defaults to DEFAULT_ROOM)."),
+    ] = None,
+    start: Annotated[int, Field(ge=0, description="0-based starting queue offset.")] = 0,
+    limit: Annotated[int, Field(ge=1, le=100, description="Maximum queue items to return.")] = 25,
+) -> QueueState:
+    """Inspect upcoming tracks, play_mode (shuffle/repeat), and crossfade state in a room's playback queue."""
+    return await _run_service_call(get_workflows().get_queue, room=room, start=start, limit=limit)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Manage Playback Queue",
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    )
+)
+async def manage_queue(
+    action: Annotated[
+        QueueAction,
+        Field(description="Queue operation: 'clear', 'remove', 'jump', 'shuffle', 'repeat', or 'crossfade'."),
+    ],
+    room: Annotated[
+        Optional[str],
+        Field(description="Target room ID or alias (defaults to DEFAULT_ROOM)."),
+    ] = None,
+    index: Annotated[
+        Optional[int],
+        Field(ge=0, description="0-based queue index required for 'remove' or 'jump'."),
+    ] = None,
+    enabled: Annotated[
+        Optional[bool],
+        Field(description="Boolean toggle required for 'shuffle' or 'crossfade'."),
+    ] = None,
+    repeat_mode: Annotated[
+        Optional[Literal["none", "all", "one"]],
+        Field(description="Repeat setting required when action='repeat'."),
+    ] = None,
+) -> ActionResult:
+    """Clear, reorder, jump within, or toggle shuffle/repeat/crossfade on a room coordinator's queue."""
+    return await _run_service_call(
+        get_workflows().manage_queue,
+        action,
+        room=room,
+        index=index,
+        enabled=enabled,
+        repeat_mode=repeat_mode,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Curate Multi-Track Queue",
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=True,
+    )
+)
+async def curate_queue(
+    tracks: Annotated[
+        List[str],
+        Field(min_length=1, max_length=20, description="List of song/artist search queries (up to 20) to enqueue in order."),
+    ],
+    room: Annotated[
+        Optional[str],
+        Field(description="Target room ID or alias (defaults to DEFAULT_ROOM)."),
+    ] = None,
+    mode: Annotated[
+        Literal["replace", "append"],
+        Field(description="'replace' clears existing queue first; 'append' preserves existing tracks."),
+    ] = "replace",
+    start_playing: Annotated[
+        bool,
+        Field(description="Start playing immediately if replacing queue or currently stopped."),
+    ] = True,
+) -> ActionResult:
+    """Resolve multiple Apple Music song queries in parallel and queue them as a cohesive playlist in one call."""
+    return await _run_service_call(
+        get_workflows().curate_queue,
+        tracks,
+        room=room,
+        mode=mode,
+        start_playing=start_playing,
+        timeout=30.0,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Set Sleep Timer",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
+async def set_sleep_timer(
+    room: Annotated[
+        Optional[str],
+        Field(description="Target room ID or alias (defaults to DEFAULT_ROOM)."),
+    ] = None,
+    minutes: Annotated[
+        Optional[int],
+        Field(ge=0, le=720, description="Duration in minutes before auto-stop (pass 0 or null to cancel timer)."),
+    ] = None,
+) -> SleepTimerResult:
+    """Set or cancel a native Sonos hardware sleep timer on a room's group coordinator."""
+    return await _run_service_call(get_workflows().set_sleep_timer, room=room, minutes=minutes)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Play Snapshot-Restore Announcement",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=True,
+    )
+)
+async def announce_audio(
+    rooms: Annotated[
+        List[str],
+        Field(min_length=1, description="Rooms to play the chime/announcement on (explicitly omit sleeping rooms!)."),
+    ],
+    uri: Annotated[
+        str,
+        Field(min_length=8, description="Public or LAN http(s):// audio URL to play as an alert/announcement."),
+    ],
+    volume: Annotated[
+        int,
+        Field(ge=0, le=100, description="Temporary announcement volume (subject to safety caps unless force=true)."),
+    ] = 30,
+    duration_seconds: Annotated[
+        float,
+        Field(ge=0.5, le=60.0, description="Seconds to wait before restoring previous playback state."),
+    ] = 5.0,
+    force: Annotated[
+        bool,
+        Field(description="Override per-room or quiet-hours maximum volume safety caps."),
+    ] = False,
+) -> AnnouncementResult:
+    """Snapshot rooms, play a short http(s) audio alert/chime, and restore exact previous playback/TV/volume."""
+    return await _run_service_call(
+        get_workflows().announce_audio,
+        rooms,
+        uri,
+        volume=volume,
+        duration_seconds=duration_seconds,
+        force=force,
+        timeout=max(TOOL_TIMEOUT_SECONDS, duration_seconds + 15.0),
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="List Household Scenes",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
+async def list_scenes() -> ScenesList:
+    """List declarative multi-step household scenes defined in scenes.json."""
+    return await _run_service_call(get_workflows().list_scenes)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Apply Household Scene",
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    )
+)
+async def apply_scene(
+    scene_name: Annotated[
+        str,
+        Field(min_length=1, description="Scene name from list_scenes() (e.g., bedtime_kids, movie_night, morning_radio, party_mode, all_off)."),
+    ],
+    exclude_rooms: Annotated[
+        Optional[List[str]],
+        Field(description="Optional rooms to protect/skip (e.g., ['bedroom'] when someone is sleeping)."),
+    ] = None,
+    force: Annotated[
+        bool,
+        Field(description="Override volume safety caps while applying scene."),
+    ] = False,
+) -> SceneResult:
+    """Execute a multi-step household routine from scenes.json while safely skipping any excluded rooms."""
+    return await _run_service_call(
+        get_workflows().apply_scene,
+        scene_name,
+        exclude_rooms=exclude_rooms,
+        force=force,
+        timeout=30.0,
+    )
+
+
+# ------------------------------------------------------------------
 # MCP Resources (Read-Only Context)
 # ------------------------------------------------------------------
 
@@ -335,6 +670,18 @@ async def favorites_resource() -> str:
 
 
 @mcp.resource(
+    "sonos://scenes",
+    name="household_scenes",
+    title="Household Audio Scenes",
+    description="Configured declarative household scenes from scenes.json.",
+    mime_type="application/json",
+)
+async def scenes_resource() -> str:
+    scenes = await _run_resource_call(get_workflows().list_scenes)
+    return scenes.model_dump_json(indent=2)
+
+
+@mcp.resource(
     "sonos://room/{room}/now-playing",
     name="room_now_playing",
     title="Room Now Playing",
@@ -344,6 +691,77 @@ async def favorites_resource() -> str:
 async def room_now_playing_resource(room: str) -> str:
     state = await _run_resource_call(get_service().get_room_state, room)
     return state.model_dump_json(indent=2)
+
+
+# ------------------------------------------------------------------
+# MCP Prompts (Reusable Multi-Step Workflow Templates)
+# ------------------------------------------------------------------
+
+
+@mcp.prompt(
+    name="bedtime_kids",
+    title="Kids Bedtime Routine",
+    description="Safely start Kids Room Pink Noise with sleep timer and enable Living Room TV Night Mode.",
+)
+def bedtime_kids_prompt(duration_minutes: int = 60, volume: int = 22) -> str:
+    return (
+        "Execute the kids bedtime routine safely:\n"
+        "1. Inspect current playback via get_household_state() first so you do not disturb sleeping rooms.\n"
+        "2. Ensure kids_room is ungrouped via ungroup_rooms(['kids_room']).\n"
+        f"3. Play the 'Pink Noise' favorite in kids_room, fade volume smoothly to {volume}, "
+        f"and set a {duration_minutes}-minute sleep timer.\n"
+        "4. If living_room is a soundbar (Sonos Arc), enable night_mode=True and speech_enhancement=True via configure_tv_audio.\n"
+        "5. Summarize the exact changes made."
+    )
+
+
+@mcp.prompt(
+    name="movie_night",
+    title="Living Room Movie Night",
+    description="Switch Living Room Sonos Arc to TV audio with Speech Enhancement and optional Night Mode.",
+)
+def movie_night_prompt(enable_night_mode: bool = False) -> str:
+    return (
+        "Prepare Living Room for Movie Night:\n"
+        "1. Call get_household_state() to verify group topology and check if other rooms are in use.\n"
+        "2. Detach living_room if grouped via ungroup_rooms(['living_room']).\n"
+        "3. Switch living_room to TV input via select_source(source='tv', room='living_room').\n"
+        f"4. Call configure_tv_audio(room='living_room', speech_enhancement=True, night_mode={enable_night_mode}).\n"
+        "5. Confirm volume and TV audio settings concisely."
+    )
+
+
+@mcp.prompt(
+    name="morning_radio",
+    title="Morning Radio Briefing",
+    description="Gently fade in a saved radio station favorite in the morning.",
+)
+def morning_radio_prompt(station: str = "GLGLZ", room: str = "living_room", volume: int = 24) -> str:
+    return (
+        f"Start morning radio ({station}) in {room}:\n"
+        f"1. Check get_household_state() and list_favorites() to confirm exact station title.\n"
+        f"2. Ensure {room} is standalone so sleeping rooms stay silent.\n"
+        f"3. Play favorite '{station}' in {room} and fade volume smoothly to {volume} with AUTOPLAY_RAMP_TYPE.\n"
+        "4. Report what is now playing."
+    )
+
+
+@mcp.prompt(
+    name="party_mode",
+    title="Multi-Room Party Mode",
+    description="Group active rooms, enable crossfade, and optionally curate a themed playlist.",
+)
+def party_mode_prompt(exclude_rooms: str = "", vibe: str = "") -> str:
+    excl = f" Always exclude these rooms: {exclude_rooms}." if exclude_rooms.strip() else ""
+    music = f" Then curate a 6-track queue matching '{vibe}' using curate_queue()." if vibe.strip() else ""
+    return (
+        "Set up multi-room Party Mode:\n"
+        f"1. Inspect rooms via get_household_state().{excl}\n"
+        "2. Group eligible rooms into living_room via group_rooms().\n"
+        "3. Enable crossfade via manage_queue(action='crossfade', room='living_room', enabled=True).\n"
+        f"4. Balance group volume to a comfortable level (around 28-32).{music}\n"
+        "5. Summarize grouped rooms and active playlist."
+    )
 
 
 if __name__ == "__main__":

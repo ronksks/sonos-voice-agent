@@ -309,6 +309,7 @@ class FakeSoCo:
             old_group.members.remove(self)
         if old_group.coordinator is self and old_group.members:
             old_group.coordinator = old_group.members[0]
+            old_group.uid = f"GROUP_{old_group.coordinator.uid}"
         self.group = FakeGroup(self, [self])
 
     def ramp_to_volume(self, volume: int, ramp_type: str = "SLEEP_TIMER_RAMP_TYPE") -> int:

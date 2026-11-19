@@ -187,6 +187,13 @@ class SceneDefinition(BaseModel):
     steps: List[SceneStep] = Field(default_factory=list)
 
 
+class ScenesList(BaseModel):
+    """Collection of available household scenes."""
+
+    count: int
+    scenes: List[SceneDefinition]
+
+
 class SceneResult(BaseModel):
     """Result of applying a multi-step household scene."""
 

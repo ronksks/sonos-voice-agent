@@ -1,0 +1,50 @@
+{
+  "scenes": [
+    {
+      "name": "bedtime_kids",
+      "description": "Ungroup Kids Room, start Pink Noise at gentle ramped volume with a 60-minute sleep timer, and enable Living Room TV Night Mode.",
+      "steps": [
+        {"action": "ungroup", "params": {"rooms": ["kids_room"]}},
+        {"action": "play_media", "params": {"room": "kids_room", "query": "Pink Noise", "source": "favorite"}},
+        {"action": "fade_volume", "params": {"room": "kids_room", "target_volume": 22, "ramp_type": "SLEEP_TIMER_RAMP_TYPE"}},
+        {"action": "set_sleep_timer", "params": {"room": "kids_room", "minutes": 60}},
+        {"action": "configure_tv_audio", "params": {"room": "living_room", "night_mode": true, "speech_enhancement": true}}
+      ]
+    },
+    {
+      "name": "movie_night",
+      "description": "Ungroup Living Room Arc, switch to TV audio, enable Speech Enhancement, and set comfortable cinema volume.",
+      "steps": [
+        {"action": "ungroup", "params": {"rooms": ["living_room"]}},
+        {"action": "select_source", "params": {"room": "living_room", "source": "tv"}},
+        {"action": "configure_tv_audio", "params": {"room": "living_room", "speech_enhancement": true}},
+        {"action": "set_volume", "params": {"room": "living_room", "level": 32}}
+      ]
+    },
+    {
+      "name": "morning_radio",
+      "description": "Ungroup Living Room, fade volume gently to 24, and play GLGLZ radio favorite.",
+      "steps": [
+        {"action": "ungroup", "params": {"rooms": ["living_room"]}},
+        {"action": "play_media", "params": {"room": "living_room", "query": "GLGLZ", "source": "favorite"}},
+        {"action": "fade_volume", "params": {"room": "living_room", "target_volume": 24, "ramp_type": "AUTOPLAY_RAMP_TYPE"}}
+      ]
+    },
+    {
+      "name": "party_mode",
+      "description": "Group available rooms into Living Room, enable crossfade, and equalize volumes to 30. Supports exclude_rooms (e.g. bedroom when someone is sleeping).",
+      "steps": [
+        {"action": "group_all", "params": {"coordinator_room": "living_room"}},
+        {"action": "manage_queue", "params": {"room": "living_room", "action": "crossfade", "enabled": true}},
+        {"action": "set_volume", "params": {"room": "living_room", "level": 30, "apply_to_group": true}}
+      ]
+    },
+    {
+      "name": "all_off",
+      "description": "Pause playback across all non-excluded rooms.",
+      "steps": [
+        {"action": "pause_all", "params": {}}
+      ]
+    }
+  ]
+}
