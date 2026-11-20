@@ -1,11 +1,13 @@
 """Integration and unit tests for the unified async FastAPI voice agent + mounted Streamable HTTP /mcp."""
 
 import json
+import re
+import typing
 from fastapi.testclient import TestClient
 import httpx
 import pytest
 
-from agent import create_app, fallback_keyword_parse
+from agent import VoiceToolName, _build_system_prompt, create_app, fallback_keyword_parse
 from config import load_settings
 from sonos_service import SonosService, SpeakerRegistry, reset_service
 from tests.conftest import FakeShareLinkPlugin, build_fake_household
@@ -214,5 +216,80 @@ def test_mounted_streamable_http_mcp_endpoint_works_end_to_end():
             assert call_body["result"]["isError"] is False
             rooms = call_body["result"]["structuredContent"]["rooms"]
             assert [r["room"] for r in rooms] == ["bedroom", "kids_room", "living_room"]
+    finally:
+        reset_service(None)
+
+
+def test_system_prompt_lists_all_tools_and_avoids_pink_noise_primacy():
+    settings = load_settings({})
+    rooms = ["bedroom", "kids_room", "living_room"]
+    prompt = _build_system_prompt(settings, rooms, ["Pink Noise", "GLGLZ"], ["movie_night"])
+
+    for tool_name in typing.get_args(VoiceToolName):
+        assert tool_name in prompt
+
+    assert prompt.index("get_status") < prompt.index("play")
+
+    without_context = re.sub(r"<context_data>.*?</context_data>", "", prompt, flags=re.DOTALL)
+    assert "Pink Noise" not in without_context
+
+
+def test_keyword_fallback_handles_ios_curly_apostrophe_and_status_variants():
+    settings = load_settings({})
+    rooms = ["bedroom", "kids_room", "living_room"]
+
+    cases = [
+        ("What\u2019s playing in the living room?", "living_room"),
+        ("What is playing in kids room?", "kids_room"),
+        ("what\u2019s on in living room", "living_room"),
+        ("מה המצב בסלון?", "living_room"),
+    ]
+    for utterance, expected_room in cases:
+        actions = fallback_keyword_parse(utterance, settings, rooms)
+        assert actions[0].tool == "get_status"
+        assert actions[0].room == expected_room
+
+
+def test_command_endpoint_fast_path_for_read_only_status_skips_ollama():
+    settings, svc, household = _make_test_service()
+    ollama_offline = _build_mock_ollama_client(fail_chat=True)
+    app = create_app(settings, service=svc, ollama_client=ollama_offline, enable_warmup=False)
+    try:
+        with TestClient(app) as client:
+            resp = client.post("/command", json={"command": "What\u2019s playing in the living room?"})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["ok"] is True
+            assert body["model_used"] == "fast-path"
+            assert "living_room" in body["reply"]
+            assert "Bohemian Rhapsody" in body["reply"]
+            assert household["living_room"].queue == []
+            assert household["living_room"].calls == []
+    finally:
+        reset_service(None)
+
+    # Compound utterance must NOT be hijacked by fast-path
+    settings2, svc2, household2 = _make_test_service()
+    ollama_multi = _build_mock_ollama_client(
+        {
+            "actions": [
+                {"tool": "get_status", "room": "living_room"},
+                {"tool": "pause", "room": "living_room"},
+            ]
+        }
+    )
+    app2 = create_app(settings2, service=svc2, ollama_client=ollama_multi, enable_warmup=False)
+    try:
+        with TestClient(app2) as client2:
+            resp2 = client2.post(
+                "/command",
+                json={"command": "what's playing in living room and pause living room"},
+            )
+            assert resp2.status_code == 200
+            body2 = resp2.json()
+            assert body2["ok"] is True
+            assert body2["model_used"] == settings2.ollama_model
+            assert body2["actions_executed"] == 2
+            assert household2["living_room"].transport_state == "PAUSED_PLAYBACK"
     finally:
         reset_service(None)

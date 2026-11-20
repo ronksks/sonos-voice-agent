@@ -27,3 +27,14 @@ This document tracks architectural phases, verification checks, bugs caught, and
 | **Phase 4** | Refactored `agent.py` to async FastAPI + `httpx.AsyncClient`, Ollama JSON Schema multi-action router, word-boundary EN/HE fallback, API key & Origin/Host middleware, and mounted Streamable HTTP `/mcp` | `40/40` tests passing (`+tests/test_agent.py` incl. E2E JSON-RPC over `/mcp`) |
 | **Phase 5** | Hardened non-root `Dockerfile`, fixed `docker-compose.yml` (`env_file`, `healthcheck`), pinned `requirements.txt` + `requirements-dev.txt`, updated `.env.example`/`.dockerignore`, removed legacy `agent_gemini_backup.py` & `payload.json` | `docker compose config` exit 0; `docker build` + `--network=none` non-root UID 1000 smoke test verified `/health` + `/mcp` (`18` tools) |
 | **Phase 6** | Updated `README.md`, `PROJECT_NOTES.md`, `PROGRESS.md`, and created `docs/TOOLS.md` | Full test suite + clean `git log` review |
+
+---
+
+## v3.0.1 Voice Routing & Prompt Fix (2026-11-20)
+
+- **Root Cause**: `qwen2.5:3b` turned `"What’s playing in the living room?"` into playing `Pink Noise` because `_build_system_prompt()` omitted `get_status` (and most tool names) while putting `Pink Noise` as an early example, and `fallback_keyword_parse()` didn't normalize iOS curly apostrophes (`\u2019`).
+- **Fixes in `agent.py`**:
+  - Added `_normalize_punctuation()` converting curly apostrophes/quotes to ASCII across `/command` and `fallback_keyword_parse()`.
+  - Added `_STATUS_PHRASES` and deterministic `_fast_path_parse()` for unambiguous single-intent read-only status queries (skipping Ollama while still passing compound/mutating commands through).
+  - Updated `_build_system_prompt()` to list all 15 `VoiceToolName` tools (starting with `get_status`), include balanced few-shot examples, and remove hardcoded `Pink Noise` / `GLGLZ` rules outside `<context_data>`.
+- **Verification**: Added 3 regression tests in `tests/test_agent.py` (`43/43` passing).
