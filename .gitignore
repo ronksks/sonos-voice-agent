@@ -2,7 +2,6 @@
 .env.*
 !.env.example
 .aider*
-!.aider.conf.yml
 .vscode/
 __pycache__/
 *.pyc
