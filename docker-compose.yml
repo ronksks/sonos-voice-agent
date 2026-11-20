@@ -10,15 +10,15 @@ services:
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DEFAULT_ROOM=${DEFAULT_ROOM:-living_room}
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434/api/chat}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434/api/chat}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30.0}
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.1}
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
       - OLLAMA_THINK=${OLLAMA_THINK:-false}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - ai-net
     healthcheck:
       test:
         [
@@ -42,3 +42,7 @@ services:
         max-size: "10m"
         max-file: "3"
     restart: unless-stopped
+
+networks:
+  ai-net:
+    external: true
