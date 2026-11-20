@@ -36,6 +36,7 @@ def test_load_settings_defaults_and_overrides():
             "QUIET_HOURS_MAX_VOLUME": "30",
             "SOCO_REQUEST_TIMEOUT": "3.5",
             "OLLAMA_MODEL": "qwen2.5:3b",
+            "OLLAMA_KEEP_ALIVE": "10m",
             "SONOS_API_KEY": "secret-token",
         }
     )
@@ -47,4 +48,7 @@ def test_load_settings_defaults_and_overrides():
     assert settings.quiet_hours_max_volume == 30
     assert settings.soco_request_timeout == 3.5
     assert settings.ollama_model == "qwen2.5:3b"
+    assert settings.ollama_keep_alive == "10m"
     assert settings.sonos_api_key == "secret-token"
+    assert load_settings({}).ollama_keep_alive == "10m"
+    assert load_settings({"OLLAMA_KEEP_ALIVE": "-1"}).ollama_keep_alive == -1

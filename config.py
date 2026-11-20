@@ -159,6 +159,16 @@ def _parse_csv_list(raw: str) -> List[str]:
     return [item.strip() for item in (raw or "").split(",") if item.strip()]
 
 
+def _parse_keep_alive(raw: Optional[str], default: str = "10m") -> int | str:
+    text = (raw or "").strip()
+    if not text:
+        return default
+    try:
+        return int(text)
+    except ValueError:
+        return text
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings loaded from environment variables."""
@@ -189,6 +199,7 @@ class Settings:
     ollama_connect_timeout: float = 3.0
     ollama_num_ctx: int = 4096
     ollama_temperature: float = 0.1
+    ollama_keep_alive: int | str = "10m"
     ollama_think: bool = False
 
     # Security & runtime
@@ -237,6 +248,7 @@ def load_settings(env: Optional[Dict[str, str]] = None) -> Settings:
         ollama_connect_timeout=float(source.get("OLLAMA_CONNECT_TIMEOUT", "3.0")),
         ollama_num_ctx=int(source.get("OLLAMA_NUM_CTX", "4096")),
         ollama_temperature=float(source.get("OLLAMA_TEMPERATURE", "0.1")),
+        ollama_keep_alive=_parse_keep_alive(source.get("OLLAMA_KEEP_ALIVE"), "10m"),
         ollama_think=source.get("OLLAMA_THINK", "false").strip().lower() in ("1", "true", "yes"),
         sonos_api_key=api_key,
         allowed_origins=_parse_csv_list(source.get("ALLOWED_ORIGINS", "")),

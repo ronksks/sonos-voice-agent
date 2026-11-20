@@ -15,6 +15,7 @@ services:
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30.0}
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.1}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
       - OLLAMA_THINK=${OLLAMA_THINK:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -30,4 +31,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped

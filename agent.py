@@ -498,11 +498,16 @@ def create_app(
                 "think": cfg.ollama_think,
                 "options": {"temperature": cfg.ollama_temperature, "num_ctx": cfg.ollama_num_ctx},
                 "stream": False,
-                "keep_alive": -1,
+                "keep_alive": cfg.ollama_keep_alive,
             }
             resp = await client.post(cfg.ollama_url, json=payload)
             if resp.is_success:
-                logger.info("Ollama model '%s' pre-warmed (keep_alive=-1, think=%s).", cfg.ollama_model, cfg.ollama_think)
+                logger.info(
+                    "Ollama model '%s' pre-warmed (keep_alive=%s, think=%s).",
+                    cfg.ollama_model,
+                    cfg.ollama_keep_alive,
+                    cfg.ollama_think,
+                )
             else:
                 logger.warning("Ollama pre-warm returned HTTP %s.", resp.status_code)
         except Exception as exc:
@@ -683,7 +688,7 @@ def create_app(
                         "num_ctx": cfg.ollama_num_ctx,
                     },
                     "stream": False,
-                    "keep_alive": -1,
+                    "keep_alive": cfg.ollama_keep_alive,
                 }
                 res = await client.post(cfg.ollama_url, json=payload)
                 res.raise_for_status()

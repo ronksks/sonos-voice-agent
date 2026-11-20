@@ -5,7 +5,8 @@
   - `POST /command` & `GET /health` for iOS Shortcuts and HTTP automation.
   - `POST /mcp` via mounted MCP v2 Streamable HTTP (`MCPServer.streamable_http_app(stateless_http=True)`).
 - **Local MCP Server**: `python server.py` exposes the exact same `MCPServer` instance over `stdio` (with logging routed strictly to `stderr`).
-- **Natural Language Router**: Async `httpx.AsyncClient` calling local Ollama (`qwen2.5:3b`) with strict Pydantic JSON Schema (`format`), `keep_alive: -1`, `<context_data>` prompt-injection delimiting, multi-action support, and a word-boundary EN/HE keyword fallback.
+- **Natural Language Router**: Async `httpx.AsyncClient` calling local Ollama (`qwen2.5:3b`) with strict Pydantic JSON Schema (`format`), `keep_alive: 10m` (configurable via `OLLAMA_KEEP_ALIVE`), `<context_data>` prompt-injection delimiting, multi-action support, and a word-boundary EN/HE keyword fallback.
+- **Cross-Stack Master Ledger**: Host GPU/VRAM budgets, Ollama container invariants, and LiteLLM Proxy v2 routing rules are tracked in `C:/Users/ronya/litellm-proxy-v2/PROJECT_STATE.md`.
 - **Typed Service & Workflows**:
   - `config.py` — Validated settings (`SPEAKER_IPS` JSON or `room:ip`, aliases, timeouts, volume caps, quiet hours, auth).
   - `models.py` — Pydantic v2 structured input/output models.

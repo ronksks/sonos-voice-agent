@@ -293,3 +293,53 @@ def test_command_endpoint_fast_path_for_read_only_status_skips_ollama():
             assert household2["living_room"].transport_state == "PAUSED_PLAYBACK"
     finally:
         reset_service(None)
+
+
+def test_command_endpoint_sends_configured_ollama_keep_alive():
+    captured_payloads = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/api/chat"):
+            captured_payloads.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(
+                200,
+                json={"message": {"content": json.dumps({"actions": [{"tool": "pause", "room": "living_room"}]})}},
+            )
+        return httpx.Response(404)
+
+    settings, svc, _ = _make_test_service(env={"OLLAMA_KEEP_ALIVE": "10m"})
+    ollama = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    app = create_app(settings, service=svc, ollama_client=ollama, enable_warmup=False)
+    try:
+        with TestClient(app) as client:
+            resp = client.post("/command", json={"command": "pause living room"})
+            assert resp.status_code == 200
+            assert resp.json()["ok"] is True
+        assert len(captured_payloads) == 1
+        assert captured_payloads[0]["keep_alive"] == "10m"
+    finally:
+        reset_service(None)
+
+    captured_override = []
+
+    def handler_override(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/api/chat"):
+            captured_override.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(
+                200,
+                json={"message": {"content": json.dumps({"actions": [{"tool": "pause", "room": "living_room"}]})}},
+            )
+        return httpx.Response(404)
+
+    settings_override, svc_override, _ = _make_test_service(env={"OLLAMA_KEEP_ALIVE": "5m"})
+    ollama_override = httpx.AsyncClient(transport=httpx.MockTransport(handler_override))
+    app_override = create_app(settings_override, service=svc_override, ollama_client=ollama_override, enable_warmup=False)
+    try:
+        with TestClient(app_override) as client_override:
+            resp_override = client_override.post("/command", json={"command": "pause living room"})
+            assert resp_override.status_code == 200
+            assert resp_override.json()["ok"] is True
+        assert len(captured_override) == 1
+        assert captured_override[0]["keep_alive"] == "5m"
+    finally:
+        reset_service(None)
